@@ -1,1 +1,2 @@
 from multitask_transformers.scripts.utils import InputFeaturesMultitask
+from multitask_transformers.scripts.modeling_roberta_multitask import RobertaForMultitaskSequenceClassification
