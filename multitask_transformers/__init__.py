@@ -1,0 +1,1 @@
+from multitask_transformers.scripts.utils import InputFeaturesMultitask

@@ -1,5 +1,4 @@
 from transformers import AutoConfig, RobertaTokenizer, EvalPrediction
-from transformers import RobertaForMultitaskSequenceClassification as model_select
 from transformers import (
     HfArgumentParser,
     Trainer,
@@ -7,11 +6,11 @@ from transformers import (
     set_seed,
 )
 from transformers.configuration_roberta import RobertaConfig
-from transformers.data.processors.utils import InputFeaturesMultitask
 from torch.utils.data import Dataset
 from dataclasses import dataclass, field
 from typing import Dict, Optional
-from multitask_transformers.modeling_roberta_multitask import RobertaForMultitaskSequenceClassification
+from multitask_transformers.scripts.utils import InputFeaturesMultitask
+from multitask_transformers.modeling_roberta_multitask import RobertaForMultitaskSequenceClassification as model_select
 
 import torch
 import os 
