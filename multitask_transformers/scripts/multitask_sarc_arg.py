@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 STORED_DATA_PATH = '../data'
 
-label_dict = {'sarc': 0, 'notsarc': 1, 'agree': 0, 'disagree': 0, 'neutral': 1}
+label_dict = {'sarc': 1, 'notsarc': 0, 'agree': 1, 'disagree': 1, 'neutral': 0}
 
 @dataclass
 class ModelArguments:
