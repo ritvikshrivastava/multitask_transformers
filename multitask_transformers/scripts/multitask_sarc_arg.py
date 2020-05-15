@@ -48,8 +48,13 @@ class SarcArgDataset(Dataset):
         self.data = data
         self.tokenizer = tokenizer
 
+        # batch_encoding = self.tokenizer.batch_encode_plus(
+        # [(example.split('\t')[0], example.split('\t')[1]) for example in self.data if example.split('\t')[0] and example.split('\t')[1]],
+        # add_special_tokens=True, max_length=512, pad_to_max_length=True,
+        # )
+
         batch_encoding = self.tokenizer.batch_encode_plus(
-        [(example.split('\t')[0], example.split('\t')[1]) for example in self.data], add_special_tokens=False, max_length=512, pad_to_max_length=True,
+        [(example.split('\t')[0], example.split('\t')[1]) for example in self.data], add_special_tokens=True, max_length=512, pad_to_max_length=True,
         )
 
         self.features = []
@@ -102,7 +107,6 @@ def main():
 
     tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
     model = model_select.from_pretrained('roberta-base', config=config)
-    set_seed(training_args.seed)
 
     # Fetch Datasets
     train_set = SarcArgDataset(_load_data('train.txt'), tokenizer) if training_args.do_train else None

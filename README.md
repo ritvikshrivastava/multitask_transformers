@@ -17,3 +17,10 @@ Run Roberta Multi-Task for Sarcasm Detection - Argument Relation Detection Task:
 cd multitask_transformers/scripts/
 ./run_sarc_arg.sh
 ```
+
+Run Roberta Alternative Training Multi-Task for Sarcasm Detection - Argument Relation Detection Task: <br>
+
+```
+cd multitask_transformers/scripts/
+./run_alternate_data_multitask.sh
+```
