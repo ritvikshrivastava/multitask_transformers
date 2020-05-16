@@ -3,6 +3,8 @@ import json
 import logging
 from dataclasses import dataclass
 from typing import List, Optional, Union
+from transformers import RobertaTokenizer
+from transformers.tokenization_roberta import VOCAB_FILES_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -60,3 +62,25 @@ class InputFeaturesAlternate:
     def to_json_string(self):
         """Serializes this instance to a JSON string."""
         return json.dumps(dataclasses.asdict(self)) + "\n"
+
+
+class RobertaCustomTokenizer(RobertaTokenizer):
+    vocab_files_names = VOCAB_FILES_NAMES
+
+    def __init__(
+        self,
+        vocab_file,
+        merges_file,
+        **kwargs):
+
+        super().__init__(vocab_file, merges_file, **kwargs)
+
+    def prepare_for_tokenization(self, text, add_special_tokens=False, **kwargs):
+        if "add_prefix_space" in kwargs:
+            add_prefix_space = kwargs["add_prefix_space"]
+        else:
+            add_prefix_space = add_special_tokens
+
+        if add_prefix_space and text and not text[0].isspace():
+            text = " " + text
+        return text

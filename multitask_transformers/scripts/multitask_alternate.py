@@ -1,4 +1,4 @@
-from transformers import AutoConfig, RobertaTokenizer, EvalPrediction
+from transformers import AutoConfig, EvalPrediction
 from transformers import (
     HfArgumentParser,
     TrainingArguments,
@@ -9,7 +9,7 @@ from torch.utils.data import Dataset
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 from multitask_transformers.scripts.trainer import Trainer
-from multitask_transformers.scripts.utils import InputFeaturesAlternate
+from multitask_transformers.scripts.utils import InputFeaturesAlternate, RobertaCustomTokenizer
 from multitask_transformers.scripts.modeling_roberta_multitask import RobertaForSelectiveMultitaskClassification as model_select
 
 import torch
