@@ -194,10 +194,10 @@ class RobertaForSelectiveMultitaskClassification(BertPreTrainedModel):
         )
         sequence_output = outputs[0]
 
-        if task == 0:
+        if task[0] == 0:
             logits = self.classifier_t1(sequence_output)
 
-        elif task == 1:
+        elif task[0] == 1:
             logits = self.classifier_t2(sequence_output)
 
         outputs = (logits,) + outputs[2:]

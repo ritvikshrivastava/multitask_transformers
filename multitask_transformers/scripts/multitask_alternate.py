@@ -1,7 +1,6 @@
 from transformers import AutoConfig, RobertaTokenizer, EvalPrediction
 from transformers import (
     HfArgumentParser,
-    Trainer,
     TrainingArguments,
     set_seed,
 )
@@ -9,6 +8,7 @@ from transformers.configuration_roberta import RobertaConfig
 from torch.utils.data import Dataset
 from dataclasses import dataclass, field
 from typing import Dict, Optional
+from multitask_transformers.scripts.trainer import Trainer
 from multitask_transformers.scripts.utils import InputFeaturesAlternate
 from multitask_transformers.scripts.modeling_roberta_multitask import RobertaForSelectiveMultitaskClassification as model_select
 
@@ -120,13 +120,14 @@ def main():
 
     # Fetch Datasets
     train_set = SarcArgDataset(_load_data('train_alt.txt'), tokenizer) if training_args.do_train else None
-    dev_set = SarcArgDataset(_load_data('dev_alt.txt'), tokenizer) if training_args.do_eval else None
+    eval_dataset = SarcArgDataset(_load_data('dev_alt.txt'), tokenizer) if training_args.do_eval else None
 
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_set,
-        eval_dataset=dev_set,
+        eval_dataset=eval_dataset,
+        alternate=True,
     )
 
     # Training
