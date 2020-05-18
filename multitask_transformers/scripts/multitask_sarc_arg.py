@@ -9,8 +9,9 @@ from transformers.configuration_roberta import RobertaConfig
 from torch.utils.data import Dataset
 from dataclasses import dataclass, field
 from typing import Dict, Optional
-from multitask_transformers.scripts.utils import InputFeaturesMultitask, RobertaCustomTokenizer
+from multitask_transformers.scripts.utils import InputFeaturesMultitask, RobertaCustomTokenizer, f1
 from multitask_transformers.scripts.modeling_roberta_multitask import RobertaForMultitaskSequenceClassification as model_select
+import numpy as np
 
 import torch
 import os 
@@ -109,14 +110,19 @@ def main():
     model = model_select.from_pretrained('roberta-base', config=config)
 
     # Fetch Datasets
-    train_set = SarcArgDataset(_load_data('train.txt'), tokenizer) if training_args.do_train else None
-    eval_dataset = SarcArgDataset(_load_data('dev.txt'), tokenizer) if training_args.do_eval else None
+    train_set = SarcArgDataset(_load_data('train.v1.txt'), tokenizer) if training_args.do_train else None
+    eval_dataset = SarcArgDataset(_load_data('dev_temp_v1.txt'), tokenizer) if training_args.do_eval else None
+
+    def compute_metrics(p: EvalPrediction) -> Dict:
+        preds = np.argmax(p.predictions, axis=1)
+        return f1(preds, p.label_ids)
 
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_set,
         eval_dataset=eval_dataset,
+        compute_metrics=compute_metrics
     )
 
     # Training
@@ -141,10 +147,10 @@ def main():
             result = trainer.evaluate(eval_dataset=eval_dataset)
 
             output_eval_file = os.path.join(
-                training_args.output_dir, f"eval_results_{eval_dataset.args.task_name}.txt"
+                training_args.output_dir, f"eval_results_.txt"
             )
             with open(output_eval_file, "w") as writer:
-                logger.info("***** Eval results {} *****".format(eval_dataset.args.task_name))
+                logger.info("***** Eval results *****")
                 for key, value in result.items():
                     logger.info("  %s = %s", key, value)
                     writer.write("%s = %s\n" % (key, value))

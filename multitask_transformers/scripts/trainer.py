@@ -163,13 +163,13 @@ class Trainer:
             logger.warning(
                 "You are instantiating a Trainer but Tensorboard is not installed. You should consider installing it."
             )
-        if is_wandb_available():
-            self._setup_wandb()
-        else:
-            logger.info(
-                "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
-                "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
-            )
+        # if is_wandb_available():
+        #     self._setup_wandb()
+        # else:
+        #     logger.info(
+        #         "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
+        #         "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
+        #     )
         set_seed(self.args.seed)
         # Create output directory if needed
         if self.is_local_master():
@@ -642,7 +642,7 @@ class Trainer:
 
         output = self._prediction_loop(eval_dataloader, description="Evaluation")
 
-        self._log(output.metrics)
+        # self._log(output.metrics)
 
         if self.args.tpu_metrics_debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
@@ -686,8 +686,10 @@ class Trainer:
         logger.info("  Num examples = %d", self.num_examples(dataloader))
         logger.info("  Batch size = %d", batch_size)
         eval_losses: List[float] = []
-        preds: np.ndarray = None
-        label_ids: np.ndarray = None
+        preds_t1: np.ndarray = None
+        preds_t2: np.ndarray = None
+        label_ids_t1: np.ndarray = None
+        label_ids_t2: np.ndarray = None
         model.eval()
 
         for inputs in tqdm(dataloader, desc=description):
@@ -699,32 +701,69 @@ class Trainer:
 
             with torch.no_grad():
                 outputs = model(**inputs)
+
                 if has_labels:
-                    step_eval_loss, logits = outputs[:2]
+                    if self.alternate:
+                        step_eval_loss, logits, task = outputs[:3]
+                    else:
+                        step_eval_loss, logits_t1, logits_t2 = outputs[:3]
                     eval_losses += [step_eval_loss.mean().item()]
                 else:
                     logits = outputs[0]
 
-            if not prediction_loss_only:
-                if preds is None:
-                    preds = logits.detach().cpu().numpy()
-                else:
-                    preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-                if inputs.get("labels") is not None:
-                    if label_ids is None:
-                        label_ids = inputs["labels"].detach().cpu().numpy()
+            if self.alternate:
+                if not prediction_loss_only:
+                    if task==0:
+                        if preds_t1 is None:
+                            preds_t1 = logits.detach().cpu().numpy()
+                        else:
+                            preds_t1 = np.append(preds_t1, logits.detach().cpu().numpy(), axis=0)
+                        if inputs.get("labels") is not None:
+                            if label_ids_t1 is None:
+                                label_ids_t1 = inputs["labels"].detach().cpu().numpy()
+                            else:
+                                label_ids_t1 = np.append(label_ids_t1, inputs["labels"].detach().cpu().numpy(), axis=0)
+
+                    elif task==1:
+                        if preds_t2 is None:
+                            preds_t2 = logits.detach().cpu().numpy()
+                        else:
+                            preds_t2 = np.append(preds_t2, logits.detach().cpu().numpy(), axis=0)
+                        if inputs.get("labels") is not None:
+                            if label_ids_t2 is None:
+                                label_ids_t2 = inputs["labels"].detach().cpu().numpy()
+                            else:
+                                label_ids_t2 = np.append(label_ids_t2, inputs["labels"].detach().cpu().numpy(), axis=0)
+
+            else:
+                if not prediction_loss_only:
+                    if preds_t1 is None:
+                        preds_t1 = logits_t1.detach().cpu().numpy()
+                        preds_t2 = logits_t1.detach().cpu().numpy()
                     else:
-                        label_ids = np.append(label_ids, inputs["labels"].detach().cpu().numpy(), axis=0)
+                        preds_t1 = np.append(preds_t1, logits_t1.detach().cpu().numpy(), axis=0)
+                        preds_t2 = np.append(preds_t2, logits_t2.detach().cpu().numpy(), axis=0)
+                    if inputs.get("labels_t1") is not None:
+                        if label_ids_t1 is None or label_ids_t2 is None:
+                            label_ids_t1 = inputs["labels_t1"].detach().cpu().numpy()
+                            label_ids_t2 = inputs["labels_t2"].detach().cpu().numpy()
+                        else:
+                            label_ids_t1 = np.append(label_ids_t1, inputs["labels_t1"].detach().cpu().numpy(), axis=0)
+                            label_ids_t2 = np.append(label_ids_t2, inputs["labels_t2"].detach().cpu().numpy(), axis=0)
 
-        if is_tpu_available() and preds is not None and label_ids is not None:
-            # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
-            preds = xm.mesh_reduce("eval_preds", preds, np.concatenate)
-            label_ids = xm.mesh_reduce("eval_out_label_ids", label_ids, np.concatenate)
+        # if is_tpu_available() and preds is not None and label_ids is not None:
+        #     # tpu-comment: Get all predictions and labels from all worker shards of eval dataset
+        #     preds = xm.mesh_reduce("eval_preds", preds, np.concatenate)
+        #     label_ids = xm.mesh_reduce("eval_out_label_ids", label_ids, np.concatenate)
 
-        if self.compute_metrics is not None and preds is not None and label_ids is not None:
-            metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
-        else:
-            metrics = {}
+        metrics = {}
+        if self.compute_metrics is not None:
+            if preds_t1 is not None and label_ids_t1 is not None:
+                metrics["task 1"] = self.compute_metrics(EvalPrediction(predictions=preds_t1, label_ids=label_ids_t1))
+            if preds_t2 is not None and label_ids_t2 is not None:
+                metrics["task 2"] = self.compute_metrics(EvalPrediction(predictions=preds_t2, label_ids=label_ids_t1))
+
+
         if len(eval_losses) > 0:
             metrics["eval_loss"] = np.mean(eval_losses)
 
@@ -733,4 +772,4 @@ class Trainer:
             if not key.startswith("eval_"):
                 metrics[f"eval_{key}"] = metrics.pop(key)
 
-        return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
+        return PredictionOutput(predictions=preds_t1, label_ids=label_ids_t1, metrics=metrics)

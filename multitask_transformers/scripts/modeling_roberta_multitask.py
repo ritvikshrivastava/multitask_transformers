@@ -200,7 +200,7 @@ class RobertaForSelectiveMultitaskClassification(BertPreTrainedModel):
         elif task[0] == 1:
             logits = self.classifier_t2(sequence_output)
 
-        outputs = (logits,) + outputs[2:]
+        outputs = (logits,) + (task[0], ) + outputs[2:]
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
