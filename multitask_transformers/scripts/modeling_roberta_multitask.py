@@ -104,15 +104,9 @@ class RobertaForMultitaskSequenceClassification(BertPreTrainedModel):
 
         outputs = (logits_t1,) + (logits_t2,) + outputs[2:]
         if labels_t1 is not None and labels_t2 is not None:
-            if self.num_labels_t1 == 1 or self.num_labels_t2 == 1:
-                #  We are doing regression
-                loss_fct = MSELoss()
-                loss_t1 = loss_fct(logits_t1.view(-1), labels_t1.view(-1))
-                loss_t2 = loss_fct(logits_t2.view(-1), labels_t2.view(-1))
-            else:
-                loss_fct = CrossEntropyLoss()
-                loss_t1 = loss_fct(logits_t1.view(-1, self.num_labels_t1), labels_t1.view(-1))
-                loss_t2 = loss_fct(logits_t2.view(-1, self.num_labels_t2), labels_t2.view(-1))
+            loss_fct = CrossEntropyLoss()
+            loss_t1 = loss_fct(logits_t1.view(-1, self.num_labels_t1), labels_t1.view(-1))
+            loss_t2 = loss_fct(logits_t2.view(-1, self.num_labels_t2), labels_t2.view(-1))
 
             loss = loss_t1 + loss_t2
             outputs = (loss,) + outputs

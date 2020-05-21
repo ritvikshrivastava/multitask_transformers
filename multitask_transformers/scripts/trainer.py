@@ -737,7 +737,7 @@ class Trainer:
 
             else:
                 if not prediction_loss_only:
-                    if preds_t1 is None:
+                    if preds_t1 is None or preds_t2 is None:
                         preds_t1 = logits_t1.detach().cpu().numpy()
                         preds_t2 = logits_t1.detach().cpu().numpy()
                     else:
@@ -761,8 +761,7 @@ class Trainer:
             if preds_t1 is not None and label_ids_t1 is not None:
                 metrics["task 1"] = self.compute_metrics(EvalPrediction(predictions=preds_t1, label_ids=label_ids_t1))
             if preds_t2 is not None and label_ids_t2 is not None:
-                metrics["task 2"] = self.compute_metrics(EvalPrediction(predictions=preds_t2, label_ids=label_ids_t1))
-
+                metrics["task 2"] = self.compute_metrics(EvalPrediction(predictions=preds_t2, label_ids=label_ids_t2))
 
         if len(eval_losses) > 0:
             metrics["eval_loss"] = np.mean(eval_losses)

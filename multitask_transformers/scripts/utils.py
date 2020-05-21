@@ -1,9 +1,10 @@
 import dataclasses
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Union
 from transformers import RobertaTokenizer
+from transformers import EvalPrediction
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES
 from sklearn.metrics import f1_score, classification_report
 
@@ -30,6 +31,36 @@ def f1(preds,labels):
         "f1": confusion_matrix,
         "acc": acc
     }
+
+# def store_preds(p: EvalPrediction) -> Dict:
+#     preds = np.argmax(p.predictions, axis=1)
+#     return preds, p.label_ids
+
+@dataclass
+class DataTrainingArguments:
+    """
+    Arguments pertaining to what data we are going to input our model for training and eval.
+
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
+    """
+
+    data_dir: str = field(
+        metadata={"help": "The input data dir. Should contain the .tsv files (or other data files) for the task."}
+    )
+    train_file: str
+    eval_file: str
+    max_seq_length: int = field(
+        default=512,
+        metadata={
+            "help": "The maximum total input sequence length after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
+        },
+    )
+    # overwrite_cache: bool = field(
+    #     default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    # )
 
 
 @dataclass(frozen=True)

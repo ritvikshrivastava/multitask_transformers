@@ -1,16 +1,16 @@
-from transformers import AutoConfig, EvalPrediction
+from transformers import AutoConfig, EvalPrediction, AutoTokenizer
 from transformers import (
     HfArgumentParser,
     TrainingArguments,
     set_seed,
 )
 from multitask_transformers.scripts.trainer import Trainer
-from transformers.configuration_roberta import RobertaConfig
+from transformers import DistilBertConfig
 from torch.utils.data import Dataset
 from dataclasses import dataclass, field
 from typing import Dict, Optional
-from multitask_transformers.scripts.utils import InputFeaturesMultitask, RobertaCustomTokenizer, f1
-from multitask_transformers.scripts.modeling_roberta_multitask import RobertaForMultitaskSequenceClassification as model_select
+from multitask_transformers.scripts.utils import InputFeaturesMultitask, f1, DataTrainingArguments
+from multitask_transformers.scripts.modeling_auto import AutoModelForMultitaskSequenceClassification
 import numpy as np
 
 import torch
@@ -19,8 +19,6 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-STORED_DATA_PATH = '../data'
 
 label_dict = {'sarc': 1, 'notsarc': 0, 'agree': 1, 'disagree': 1, 'neutral': 0}
 
@@ -88,30 +86,39 @@ def _use_cuda():
     torch.backends.cudnn.benchmark = True
 
 
-def _load_data(dtype='train.txt'):
-    with open(os.path.join(STORED_DATA_PATH, dtype)) as f:
+def _load_data(dargs, evaluate=False):
+    dtype = dargs.eval_file if evaluate else dargs.train_file
+    with open(os.path.join(dargs.data_dir, dtype)) as f:
         data = f.readlines()
     return data
 
 
 def main():
-    parser = HfArgumentParser((ModelArguments, TrainingArguments))
-    model_args, training_args = parser.parse_args_into_dataclasses()
 
-    config = RobertaConfig.from_pretrained(
-    'roberta-base',
+    #_use_cuda()
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    config = AutoConfig.from_pretrained(
+    model_args.config_name if model_args.config_name else model_args.model_name_or_path,
     num_labels=2,
     )
 
     # Set seed
     set_seed(training_args.seed)
 
-    tokenizer = RobertaCustomTokenizer.from_pretrained('roberta-base')
-    model = model_select.from_pretrained('roberta-base', config=config)
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+    )
+    model = AutoModelForMultitaskSequenceClassification.from_pretrained(
+        model_args.model_name_or_path,
+        config=config,
+    )
 
+    # print(model.state_dict())
     # Fetch Datasets
-    train_set = SarcArgDataset(_load_data('train.v1.txt'), tokenizer) if training_args.do_train else None
-    eval_dataset = SarcArgDataset(_load_data('dev_temp_v1.txt'), tokenizer) if training_args.do_eval else None
+    train_set = SarcArgDataset(_load_data(data_args), tokenizer) if training_args.do_train else None
+    eval_dataset = SarcArgDataset(_load_data(data_args, evaluate=True), tokenizer) if training_args.do_eval else None
 
     def compute_metrics(p: EvalPrediction) -> Dict:
         preds = np.argmax(p.predictions, axis=1)
@@ -131,6 +138,7 @@ def main():
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
         trainer.save_model()
+        tokenizer.save_pretrained(training_args.output_dir)
         # For convenience, we also re-save the tokenizer to the same directory,
         # so that you can share your model easily on huggingface.co/models =)
         # if trainer.is_world_master():

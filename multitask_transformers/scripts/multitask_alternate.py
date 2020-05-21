@@ -1,17 +1,18 @@
-from transformers import AutoConfig, EvalPrediction
+from transformers import AutoConfig, EvalPrediction, AutoTokenizer
 from transformers import (
     HfArgumentParser,
     TrainingArguments,
     set_seed,
 )
-from transformers.configuration_roberta import RobertaConfig
+from multitask_transformers.scripts.trainer import Trainer
+from transformers import DistilBertConfig
 from torch.utils.data import Dataset
 from dataclasses import dataclass, field
 from typing import Dict, Optional
-from multitask_transformers.scripts.trainer import Trainer
-from multitask_transformers.scripts.utils import InputFeaturesAlternate, RobertaCustomTokenizer, f1
-from multitask_transformers.scripts.modeling_roberta_multitask import RobertaForSelectiveMultitaskClassification as model_select
+from multitask_transformers.scripts.utils import InputFeaturesAlternate, f1, DataTrainingArguments
+from multitask_transformers.scripts.modeling_auto import AutoModelForAlternateMultitaskClassification
 import numpy as np
+
 import torch
 import os 
 import logging
@@ -44,15 +45,18 @@ class ModelArguments:
 
 
 class SarcArgDataset(Dataset):
-    def __init__(self, data, tokenizer):
+    def __init__(self, data, tokenizer, args):
         self.data = data
         self.tokenizer = tokenizer
+        self.args = args
 
         batch_encoding = self.tokenizer.batch_encode_plus(
         [(example.split('\t')[0], example.split('\t')[1]) for example in self.data], add_special_tokens=True, max_length=512, pad_to_max_length=True,
         )
 
         self.features = []
+        self.features_0 = []
+        self.features_1 = []
         for i in range(len(self.data)):
             inputs = {k: batch_encoding[k][i] for k in batch_encoding}
 
@@ -63,20 +67,41 @@ class SarcArgDataset(Dataset):
                 **inputs,
                 labels=label_dict[sarclab.strip('\t').strip('\n')],
                 task=0)
-                self.features.append(feature)
+                self.features_0.append(feature)
 
                 feature = InputFeaturesAlternate(
                 **inputs,
                 labels=label_dict[arglab.strip('\t').strip('\n')],
                 task=1)
-                self.features.append(feature)
+                self.features_1.append(feature)
             except:
                 sarclab = self.data[i].split('\t')[2]
                 feature = InputFeaturesAlternate(
                 **inputs,
                 labels=label_dict[sarclab.strip('\t').strip('\n')],
                 task=0)
-                self.features.append(feature)
+                self.features_1.append(feature)
+
+        idx = 0
+        tsk = 0
+        tsk0idx = 0
+        tsk1idx = 0
+        while idx + self.args.train_batch_size < len(self.features_0) + len(self.features_1):
+            if tsk == 0:
+                if tsk0idx + self.args.train_batch_size < len(self.features_0): 
+                    self.features.extend(self.features_0[tsk0idx:tsk0idx + self.args.train_batch_size])
+                    tsk0idx += self.args.train_batch_size
+                    idx += self.args.train_batch_size
+                tsk = 1
+            elif tsk == 1:
+                if tsk1idx + self.args.train_batch_size < len(self.features_1): 
+                    self.features.extend(self.features_1[tsk1idx:tsk1idx + self.args.train_batch_size])
+                    tsk1idx += self.args.train_batch_size
+                    idx += self.args.train_batch_size
+                tsk = 0
+
+            if len(self.features_0) - tsk0idx < self.args.train_batch_size and len(self.features_1) - tsk1idx < self.args.train_batch_size:
+                break
 
         for i, example in enumerate(self.data[:5]):
             logger.info("*** Example ***")
@@ -95,32 +120,37 @@ def _use_cuda():
     torch.backends.cudnn.benchmark = True
 
 
-def _load_data(dtype='train_alt.txt'):
-    with open(os.path.join(STORED_DATA_PATH, dtype)) as f:
+def _load_data(dargs, evaluate=False):
+    dtype = dargs.eval_file if evaluate else dargs.train_file
+    with open(os.path.join(dargs.data_dir, dtype)) as f:
         data = f.readlines()
     return data
 
 
 def main():
-    parser = HfArgumentParser((ModelArguments, TrainingArguments))
-    model_args, training_args = parser.parse_args_into_dataclasses()
 
-    print(training_args)
+    #_use_cuda()
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    config = RobertaConfig.from_pretrained(
-    'roberta-base',
+    config = AutoConfig.from_pretrained(
+    model_args.config_name if model_args.config_name else model_args.model_name_or_path,
     num_labels=2,
     )
 
     # Set seed
     set_seed(training_args.seed)
 
-    tokenizer = RobertaCustomTokenizer.from_pretrained('roberta-base')
-    model = model_select.from_pretrained('roberta-base', config=config)
-
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+    )
+    model = AutoModelForAlternateMultitaskClassification.from_pretrained(
+        model_args.model_name_or_path,
+        config=config,
+    )
     # Fetch Datasets
-    train_set = SarcArgDataset(_load_data('train_alt.txt'), tokenizer) if training_args.do_train else None
-    eval_dataset = SarcArgDataset(_load_data('dev_alt.txt'), tokenizer) if training_args.do_eval else None
+    train_set = SarcArgDataset(_load_data(data_args), tokenizer, training_args) if training_args.do_train else None
+    eval_dataset = SarcArgDataset(_load_data(data_args, evaluate=True), tokenizer, training_args) if training_args.do_eval else None
 
     def compute_metrics(p: EvalPrediction) -> Dict:
         preds = np.argmax(p.predictions, axis=1)
@@ -142,6 +172,7 @@ def main():
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
         trainer.save_model()
+        tokenizer.save_pretrained(training_args.output_dir)
         # For convenience, we also re-save the tokenizer to the same directory,
         # so that you can share your model easily on huggingface.co/models =)
         # if trainer.is_world_master():
@@ -165,6 +196,7 @@ def main():
                 for key, value in result.items():
                     logger.info("  %s = %s", key, value)
                     writer.write("%s = %s\n" % (key, value))
+                    print(value)
 
             results.update(result)
 
