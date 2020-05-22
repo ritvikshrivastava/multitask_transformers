@@ -5,6 +5,7 @@ import os
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
+from torch.autograd import Variable
 
 from transformers.activations import gelu, gelu_new, swish
 from transformers.configuration_bert import BertConfig
@@ -39,6 +40,19 @@ BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
     "bert-base-finnish-uncased-v1": "https://cdn.huggingface.co/TurkuNLP/bert-base-finnish-uncased-v1/pytorch_model.bin",
     "bert-base-dutch-cased": "https://cdn.huggingface.co/wietsedv/bert-base-dutch-cased/pytorch_model.bin",
 }
+
+def dynamic_loss(arg_loss,sarc_loss):
+    sigma_1 = Variable(torch.tensor(0.5), requires_grad=True)
+    sigma_2 = Variable(torch.tensor(0.5), requires_grad=True)
+    arg_loss_dyn = torch.mul(torch.div(1.0, torch.mul(2.0, torch.square(sigma_1))), arg_loss) \
+          + torch.log(torch.square(sigma_1))
+           
+    sarc_loss_dyn = torch.mul(torch.div(1.0, torch.mul(2.0, torch.square(sigma_2))), sarc_loss) \
+          + torch.log(torch.square(sigma_2))
+     
+    loss = torch.add(arg_loss_dyn, sarc_loss_dyn)
+   
+    return loss
 
 class BertForMultitaskSequenceClassification(BertPreTrainedModel):
     config_class = BertConfig
@@ -92,7 +106,8 @@ class BertForMultitaskSequenceClassification(BertPreTrainedModel):
             loss_t1 = loss_fct(logits_t1.view(-1, self.num_labels), labels_t1.view(-1))
             loss_t2 = loss_fct(logits_t2.view(-1, self.num_labels), labels_t2.view(-1))
 
-            loss = loss_t1 + loss_t2
+            #loss = loss_t1 + loss_t2
+            loss = dynamic_loss(loss_t2, loss_t1)
             outputs = (loss,) + outputs
 
         return outputs  # (loss), logits, (hidden_states), (attentions)
