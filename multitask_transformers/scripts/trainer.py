@@ -221,10 +221,11 @@ class Trainer:
 
         sampler = get_tpu_sampler(eval_dataset) if is_tpu_available() else None
 
+        batch_size = 1 if self.alternate else self.args.eval_batch_size
         data_loader = DataLoader(
             eval_dataset,
             sampler=sampler,
-            batch_size=self.args.eval_batch_size,
+            batch_size=batch_size,
             shuffle=False,
             collate_fn=self.data_collator.collate_batch,
         )
@@ -623,7 +624,7 @@ class Trainer:
 
     def evaluate(
         self, eval_dataset: Optional[Dataset] = None, prediction_loss_only: Optional[bool] = None,
-    ) -> Dict[str, float]:
+    ) -> PredictionOutput:
         """
         Run evaluation and return metrics.
 
@@ -648,7 +649,7 @@ class Trainer:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
-        return output.metrics
+        return output
 
     def predict(self, test_dataset: Dataset) -> PredictionOutput:
         """
@@ -771,4 +772,4 @@ class Trainer:
             if not key.startswith("eval_"):
                 metrics[f"eval_{key}"] = metrics.pop(key)
 
-        return PredictionOutput(predictions=preds_t1, label_ids=label_ids_t1, metrics=metrics)
+        return (PredictionOutput(predictions=preds_t1, label_ids=label_ids_t1, metrics=metrics), PredictionOutput(predictions=preds_t2, label_ids=label_ids_t2, metrics=metrics))

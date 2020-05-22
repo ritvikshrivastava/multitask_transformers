@@ -9,7 +9,7 @@ from transformers import DistilBertConfig
 from torch.utils.data import Dataset
 from dataclasses import dataclass, field
 from typing import Dict, Optional
-from multitask_transformers.scripts.utils import InputFeaturesAlternate, f1, DataTrainingArguments
+from multitask_transformers.scripts.utils import InputFeaturesAlternate, f1, DataTrainingArguments, store_preds
 from multitask_transformers.scripts.modeling_auto import AutoModelForAlternateMultitaskClassification
 import numpy as np
 
@@ -45,7 +45,7 @@ class ModelArguments:
 
 
 class SarcArgDataset(Dataset):
-    def __init__(self, data, tokenizer, args):
+    def __init__(self, data, tokenizer, args, evaluate=False):
         self.data = data
         self.tokenizer = tokenizer
         self.args = args
@@ -82,25 +82,27 @@ class SarcArgDataset(Dataset):
                 task=0)
                 self.features_1.append(feature)
 
+        b_size = 1 if evaluate else self.args.train_batch_size
+
         idx = 0
         tsk = 0
         tsk0idx = 0
         tsk1idx = 0
-        while idx + self.args.train_batch_size < len(self.features_0) + len(self.features_1):
+        while idx + b_size <= len(self.features_0) + len(self.features_1):
             if tsk == 0:
-                if tsk0idx + self.args.train_batch_size < len(self.features_0): 
-                    self.features.extend(self.features_0[tsk0idx:tsk0idx + self.args.train_batch_size])
-                    tsk0idx += self.args.train_batch_size
-                    idx += self.args.train_batch_size
+                if tsk0idx + b_size <= len(self.features_0): 
+                    self.features.extend(self.features_0[tsk0idx:tsk0idx + b_size])
+                    tsk0idx += b_size
+                    idx += b_size
                 tsk = 1
             elif tsk == 1:
-                if tsk1idx + self.args.train_batch_size < len(self.features_1): 
-                    self.features.extend(self.features_1[tsk1idx:tsk1idx + self.args.train_batch_size])
-                    tsk1idx += self.args.train_batch_size
-                    idx += self.args.train_batch_size
+                if tsk1idx + b_size <= len(self.features_1): 
+                    self.features.extend(self.features_1[tsk1idx:tsk1idx + b_size])
+                    tsk1idx += b_size
+                    idx += b_size
                 tsk = 0
 
-            if len(self.features_0) - tsk0idx < self.args.train_batch_size and len(self.features_1) - tsk1idx < self.args.train_batch_size:
+            if len(self.features_0) - tsk0idx <= b_size and len(self.features_1) - tsk1idx <= b_size:
                 break
 
         for i, example in enumerate(self.data[:5]):
@@ -150,7 +152,7 @@ def main():
     )
     # Fetch Datasets
     train_set = SarcArgDataset(_load_data(data_args), tokenizer, training_args) if training_args.do_train else None
-    eval_dataset = SarcArgDataset(_load_data(data_args, evaluate=True), tokenizer, training_args) if training_args.do_eval else None
+    eval_dataset = SarcArgDataset(_load_data(data_args, evaluate=True), tokenizer, training_args, evaluate=True) if training_args.do_eval else None
 
     def compute_metrics(p: EvalPrediction) -> Dict:
         preds = np.argmax(p.predictions, axis=1)
@@ -173,11 +175,6 @@ def main():
         )
         trainer.save_model()
         tokenizer.save_pretrained(training_args.output_dir)
-        # For convenience, we also re-save the tokenizer to the same directory,
-        # so that you can share your model easily on huggingface.co/models =)
-        # if trainer.is_world_master():
-        #     tokenizer.save_pretrained(training_args.output_dir)
-
 
     # Evaluation
     results = {}
@@ -186,7 +183,8 @@ def main():
 
         eval_datasets = [eval_dataset]
         for eval_dataset in eval_datasets:
-            result = trainer.evaluate(eval_dataset=eval_dataset)
+            result_set = trainer.evaluate(eval_dataset=eval_dataset)
+            result = result_set[0].metrics
 
             output_eval_file = os.path.join(
                 training_args.output_dir, f"eval_results_alternate.txt"
@@ -200,18 +198,35 @@ def main():
 
             results.update(result)
 
+            preds_t1, label_ids_t1 = result_set[0].predictions, result_set[0].label_ids
+            preds_t2, label_ids_t2 = result_set[1].predictions, result_set[1].label_ids
+            preds_t1, labels_t1 = store_preds(EvalPrediction(predictions=preds_t1, label_ids=label_ids_t1))
+            preds_t2, labels_t2 = store_preds(EvalPrediction(predictions=preds_t2, label_ids=label_ids_t2))
+
+            data = _load_data(data_args, evaluate=True)
+            context, reply = [], []
+            for example in data:
+                ctx, rpl = example.split('\t')[0:2]
+                context.append(ctx)
+                reply.append(rpl)
+
+            output_score_file_t1 = os.path.join(
+                training_args.output_dir, f"eval_preds_t1_alternate.txt"
+            )
+
+            output_score_file_t2 = os.path.join(
+                training_args.output_dir, f"eval_preds_t2_alternate.txt"
+            )
+
+            with open(output_score_file_t1, "w") as writer:
+                for i in range(len(labels_t1)):
+                    writer.write("%s\t%s\t%s\t%s\n" % (context[i], reply[i], labels_t1[i], preds_t1[i]))
+
+            with open(output_score_file_t2, "w") as writer:
+                for i in range(len(labels_t2)):
+                    writer.write("%s\t%s\t%s\t%s\n" % (context[i], reply[i], labels_t2[i], preds_t2[i]))
+
     return results
-
-
-def test_single_run():
-    # testing a single pair
-    input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", "dog is very cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
-    labels_t1 = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-    labels_t2 = torch.tensor([1]).unsqueeze(0)  # Batch size 1
-    outputs = model(input_ids, labels_t1=labels_t1, labels_t2=labels_t2)
-    loss, logits1, logits2 = outputs[:3]
-
-    print(outputs)
 
 
 if __name__ == "__main__":

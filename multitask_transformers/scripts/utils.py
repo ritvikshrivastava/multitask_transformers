@@ -2,12 +2,12 @@ import dataclasses
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict
 from transformers import RobertaTokenizer
 from transformers import EvalPrediction
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES
 from sklearn.metrics import f1_score, classification_report
-
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +32,9 @@ def f1(preds,labels):
         "acc": acc
     }
 
-# def store_preds(p: EvalPrediction) -> Dict:
-#     preds = np.argmax(p.predictions, axis=1)
-#     return preds, p.label_ids
+def store_preds(p: EvalPrediction) -> Dict:
+    preds = np.argmax(p.predictions, axis=1)
+    return preds, p.label_ids
 
 @dataclass
 class DataTrainingArguments:

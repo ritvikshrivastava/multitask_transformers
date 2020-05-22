@@ -41,13 +41,11 @@ class DistilBertForMultitaskSequenceClassification(BertPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        labels=None,
-        task=None,
-    ):
+        labels_t1=None,
+        labels_t2=None
+        ):
         
         distilbert_output = self.distilbert(
             input_ids=input_ids, attention_mask=attention_mask, head_mask=head_mask, inputs_embeds=inputs_embeds

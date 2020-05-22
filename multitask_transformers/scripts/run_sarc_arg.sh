@@ -4,7 +4,7 @@ python multitask_sarc_arg.py \
   --do_eval \
   --data_dir ../data/ \
   --train_file train.v1.txt \
-  --eval_file dev.v1.txt \
-  --num_train_epochs 1 \
-  --output_dir . \
+  --eval_file test.v1.txt \
+  --num_train_epochs 5 \
+  --output_dir ./multi_out \
   --overwrite_output_dir
