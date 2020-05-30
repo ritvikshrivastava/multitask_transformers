@@ -8,6 +8,8 @@ from transformers import DistilBertConfig
 from transformers.modeling_bert import BertEmbeddings, BertLayerNorm, BertModel, BertPreTrainedModel, gelu
 from transformers.modeling_distilbert import DistilBertModel
 from copy import deepcopy
+from torch.autograd import Variable
+
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +25,13 @@ DISTILBERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
 
 
 def dynamic_loss(arg_loss,sarc_loss):
-    sigma_1 = Variable(torch.tensor(0.5), requires_grad=True)
-    sigma_2 = Variable(torch.tensor(0.5), requires_grad=True)
-    arg_loss_dyn = torch.mul(torch.div(1.0, torch.mul(2.0, torch.square(sigma_1))), arg_loss) \
-          + torch.log(torch.square(sigma_1))
+    sigma_1 = Variable(torch.tensor(0.5).type(torch.cuda.FloatTensor), requires_grad=True)
+    sigma_2 = Variable(torch.tensor(0.5).type(torch.cuda.FloatTensor), requires_grad=True)
+    arg_loss_dyn = torch.mul(torch.div(1.0, torch.mul(2.0, torch.pow(sigma_1, 2))), arg_loss) \
+          + torch.log(torch.pow(sigma_1, 2))
            
-    sarc_loss_dyn = torch.mul(torch.div(1.0, torch.mul(2.0, torch.square(sigma_2))), sarc_loss) \
-          + torch.log(torch.square(sigma_2))
+    sarc_loss_dyn = torch.mul(torch.div(1.0, torch.mul(2.0, torch.pow(sigma_1, 2))), sarc_loss) \
+          + torch.log(torch.pow(sigma_1, 2))
      
     loss = torch.add(arg_loss_dyn, sarc_loss_dyn)
    
@@ -85,8 +87,8 @@ class DistilBertForMultitaskSequenceClassification(BertPreTrainedModel):
             loss_t1 = loss_fct(logits_t1.view(-1, self.num_labels), labels_t1.view(-1))
             loss_t2 = loss_fct(logits_t2.view(-1, self.num_labels), labels_t2.view(-1))
 
-            #loss = loss_t1 + loss_t2
-            loss = dynamic_loss(loss_t2, loss_t1)
+            loss = loss_t1 + loss_t2
+            # loss = dynamic_loss(loss_t2, loss_t1)
             outputs = (loss,) + outputs
 
         return outputs  # (loss), logits, (hidden_states), (attentions)

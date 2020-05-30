@@ -106,8 +106,8 @@ class BertForMultitaskSequenceClassification(BertPreTrainedModel):
             loss_t1 = loss_fct(logits_t1.view(-1, self.num_labels), labels_t1.view(-1))
             loss_t2 = loss_fct(logits_t2.view(-1, self.num_labels), labels_t2.view(-1))
 
-            #loss = loss_t1 + loss_t2
-            loss = dynamic_loss(loss_t2, loss_t1)
+            loss = loss_t1 + loss_t2
+            # loss = dynamic_loss(loss_t2, loss_t1)
             outputs = (loss,) + outputs
 
         return outputs  # (loss), logits, (hidden_states), (attentions)
