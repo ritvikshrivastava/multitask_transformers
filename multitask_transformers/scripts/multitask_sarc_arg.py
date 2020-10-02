@@ -21,7 +21,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-label_dict = {'sarc': 1, 'notsarc': 0, 'agree': 1, 'disagree': 1, 'neutral': 0}
+label_dict = {'sarc': 1, 'notsarc': 0, 'agree': 0, 'disagree': 1, 'neutral': 2}
 
 @dataclass
 class ModelArguments:
@@ -102,7 +102,7 @@ def main():
 
     config = AutoConfig.from_pretrained(
     model_args.config_name if model_args.config_name else model_args.model_name_or_path,
-    num_labels=2,
+    num_labels=3,
     )
 
     # Set seed

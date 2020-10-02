@@ -44,13 +44,10 @@ BERT_PRETRAINED_MODEL_ARCHIVE_MAP = {
 def dynamic_loss(arg_loss,sarc_loss):
     sigma_1 = Variable(torch.tensor(0.5), requires_grad=True)
     sigma_2 = Variable(torch.tensor(0.5), requires_grad=True)
-    arg_loss_dyn = torch.mul(torch.div(1.0, torch.mul(2.0, torch.square(sigma_1))), arg_loss) \
-          + torch.log(torch.square(sigma_1))
-           
-    sarc_loss_dyn = torch.mul(torch.div(1.0, torch.mul(2.0, torch.square(sigma_2))), sarc_loss) \
-          + torch.log(torch.square(sigma_2))
+    arg_loss_dyn = torch.mul(torch.div(1.0, torch.mul(2.0, torch.square(sigma_1))), arg_loss)           
+    sarc_loss_dyn = torch.mul(torch.div(1.0, torch.mul(2.0, torch.square(sigma_2))), sarc_loss)
      
-    loss = torch.add(arg_loss_dyn, sarc_loss_dyn)
+    loss = torch.add(arg_loss_dyn, sarc_loss_dyn, torch.log(torch.mul(sigma_1, sigma_2)))
    
     return loss
 
