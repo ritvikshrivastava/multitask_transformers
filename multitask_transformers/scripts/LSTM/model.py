@@ -9,6 +9,8 @@ from torchtext.data import Field, TabularDataset, BucketIterator
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from torch.utils.data import Dataset
 from torch.autograd import Variable
+from sklearn.metrics import classification_report
+from tqdm import tqdm
 
 
 # determine what device to use
@@ -81,51 +83,93 @@ def train(
     loss_epochs = []
     val_loss_epochs = []
     for epoch in range(num_epochs):
+        # print("Epoch: ", str(epoch))
         model.train()
-        sum_loss = 0.
 
-        for ((pt, pt_len), (ct, ct_len), arg_labels, sarc_labels), _ in train_it:
-            sarc_outs, arg_outs = model(pt, pt_len, ct, ct_len)
-            arg_loss = criterion(arg_outs, arg_labels)
-            sarc_loss = criterion(sarc_outs, sarc_labels)
+        with tqdm(total = len(train_it)) as epoch_pbar:
+            epoch_pbar.set_description(f'Epoch {epoch}')
 
-            # Choose loss addition for multitask (direct-add vs dynamic)
-            if dynamic:
-                loss = dynamic_loss(arg_loss, sarc_loss)
-            else:
-                loss = torch.add(arg_loss, sarc_loss)
-            
-            # flooding
-            if flood:
-                loss = (loss-flood_level).abs() + flood_level
+            sum_loss = 0.
+            for ((pt, pt_len), (ct, ct_len), arg_labels, sarc_labels), _ in train_it:
+                # pt = pt.to(device)
+                # pt_len = pt_len.to(device)
+                # ct = ct.to(device)
+                # ct_len = ct_len.to(device)
+                # arg_labels = arg_labels.to(device)
+                # sarc_labels = sarc_labels.to(device)
 
-            loss.backward()
-            sum_loss += loss.item()
-            optimizer.step()
+                sarc_outs, arg_outs = model(pt, pt_len, ct, ct_len)
+                arg_loss = criterion(arg_outs, arg_labels)
+                sarc_loss = criterion(sarc_outs, sarc_labels)
 
-        avg_loss_epoch = sum_loss/len(train_it)
-        avg_val_loss_epoch = eval(model, test_it, criterion)
-        print("train loss: ", avg_loss_epoch, "val loss: ", avg_val_loss_epoch)
+                # Choose loss addition for multitask (direct-add vs dynamic)
+                if dynamic:
+                    loss = dynamic_loss(arg_loss, sarc_loss)
+                else:
+                    loss = torch.add(arg_loss, sarc_loss)
+                
+                # flooding
+                if flood:
+                    loss = (loss-flood_level).abs() + flood_level
 
-        loss_epochs.append(avg_loss_epoch)
-        val_loss_epochs.append(avg_val_loss_epoch)
+                loss.backward()
+                sum_loss += loss.item()
+                optimizer.step()
+
+                # desc = f'Epoch {epoch} - loss {avg_loss:.4f}'
+                # epoch_pbar.set_description(desc)
+                epoch_pbar.update(1)
+
+
+            avg_loss_epoch = sum_loss/len(train_it)
+            avg_val_loss_epoch = eval(model, test_it, criterion)
+            print("train loss: ", avg_loss_epoch, "val loss: ", avg_val_loss_epoch)
+
+            loss_epochs.append(avg_loss_epoch)
+            val_loss_epochs.append(avg_val_loss_epoch)
+
 
 def eval(model, test_it, criterion):
     model.eval()
 
     sum_val_loss = 0.
+    arg_preds = []
+    arg_labels_all = []
+    sarc_preds = []
+    sarc_labels_all =[]
 
-    with torch.no_grad():
-        for ((pt, pt_len), (ct, ct_len), arg_labels, sarc_labels), _ in test_it:
-            sarc_outs, arg_outs = model(pt, pt_len, ct, ct_len)
-            print(sarc_outs.shape, arg_outs.shape)
-            arg_loss = criterion(arg_outs, arg_labels)
-            sarc_loss = criterion(sarc_outs, sarc_labels)
-            loss = torch.add(arg_loss, sarc_loss)
-            # loss = dynamic_loss(arg_loss, sarc_loss)
-            sum_val_loss += loss.item()
+    with tqdm(total = len(test_it)) as val_pbar:
+        val_pbar.set_description(f'Validating')
 
-        return sum_val_loss/len(test_it)
+        with torch.no_grad():
+            for ((pt, pt_len), (ct, ct_len), arg_labels, sarc_labels), _ in test_it:
+                # pt = pt.to(device)
+                # pt_len = pt_len.to(device)
+                # ct = ct.to(device)
+                # ct_len = ct_len.to(device)
+                # arg_labels = arg_labels.to(device)
+                # sarc_labels = sarc_labels.to(device)
+
+                sarc_outs, arg_outs = model(pt, pt_len, ct, ct_len)
+                arg_loss = criterion(arg_outs, arg_labels)
+                sarc_loss = criterion(sarc_outs, sarc_labels)
+                loss = torch.add(arg_loss, sarc_loss)
+                # loss = dynamic_loss(arg_loss, sarc_loss)
+                sum_val_loss += loss.item()
+
+                arg_pred = list(torch.max(arg_outs[:,1:], 1)[1]+1)
+                arg_preds.extend([i.item() for i in arg_pred])
+                arg_labels_all.extend([i.item() for i in arg_labels])
+
+                sarc_pred = list(torch.max(sarc_outs[:,1:], 1)[1]+1)
+                sarc_preds.extend([i.item() for i in sarc_pred])
+                sarc_labels_all.extend([i.item() for i in sarc_labels])
+
+                val_pbar.update(1)
+
+            print(classification_report(arg_labels_all, arg_preds), '\n', classification_report(sarc_labels_all, sarc_preds))
+            return sum_val_loss/len(test_it)
+
 
 if __name__ == "__main__":
     sarc_label_field = data.Field(sequential=False, use_vocab=True, batch_first=True)
