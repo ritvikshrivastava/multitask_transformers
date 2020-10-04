@@ -289,4 +289,5 @@ if __name__ == "__main__":
         num_epochs=1,
         flood=False,
         flood_level=0.5,
+        dynamic=False,
     )
