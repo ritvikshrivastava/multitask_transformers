@@ -45,7 +45,7 @@ class Attention(nn.Module):
         # concat -> (batch, out_len, 2*dim)
         combined = torch.cat((mix, output), dim=2)
         # output -> (batch, out_len, dim)
-        output = F.tanh(self.linear_out(combined.view(-1, 2 * hidden_size))).view(
+        output = torch.tanh(self.linear_out(combined.view(-1, 2 * hidden_size))).view(
             batch_size, -1, hidden_size
         )
 
@@ -231,9 +231,9 @@ def eval(model, test_it, criterion_sarc, criterion_arg):
                 val_pbar.update(1)
 
             print(
-                classification_report(arg_labels_all, arg_preds),
+                classification_report(arg_labels_all, arg_preds, digits=4),
                 "\n",
-                classification_report(sarc_labels_all, sarc_preds),
+                classification_report(sarc_labels_all, sarc_preds, digits=4),
             )
             return sum_val_loss / len(test_it)
 
