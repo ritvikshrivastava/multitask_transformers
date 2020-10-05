@@ -185,14 +185,14 @@ def train(
                 epoch_pbar.update(1)
 
             avg_loss_epoch = sum_loss / len(train_it)
-            avg_val_loss_epoch = eval(model, test_it, criterion)
+            avg_val_loss_epoch = eval(model, test_it, criterion_sarc, criterion_arg)
             print("train loss: ", avg_loss_epoch, "val loss: ", avg_val_loss_epoch)
 
             loss_epochs.append(avg_loss_epoch)
             val_loss_epochs.append(avg_val_loss_epoch)
 
 
-def eval(model, test_it, criterion):
+def eval(model, test_it, criterion_sarc, criterion_arg):
     model.eval()
 
     sum_val_loss = 0.0
@@ -214,8 +214,8 @@ def eval(model, test_it, criterion):
                 # sarc_labels = sarc_labels.to(device)
 
                 sarc_outs, arg_outs = model(pt, pt_len, ct, ct_len)
-                arg_loss = criterion(arg_outs, arg_labels)
-                sarc_loss = criterion(sarc_outs, sarc_labels)
+                arg_loss = criterion_arg(arg_outs, arg_labels)
+                sarc_loss = criterion_sarc(sarc_outs, sarc_labels)
                 loss = torch.add(arg_loss, sarc_loss)
                 # loss = dynamic_loss(arg_loss, sarc_loss)
                 sum_val_loss += loss.item()
@@ -279,7 +279,7 @@ if __name__ == "__main__":
     for ((pt, pt_len), (ct, ct_len), arg_labels, sarc_labels), _ in train_it:
         arg_labels_all.extend([i.item() for i in arg_labels])
         sarc_labels_all.extend([i.item() for i in sarc_labels])
-        
+
     # Generate Class Weights
     counter_arg = Counter([train_data for train_data in arg_labels_all])
     class_weights_arg = [0] + [
