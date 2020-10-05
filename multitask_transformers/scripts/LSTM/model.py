@@ -276,8 +276,7 @@ if __name__ == "__main__":
 
     arg_labels_all = []
     sarc_labels_all = []
-    for ((pt, pt_len), (ct, ct_len), arg_labels, sarc_labels), _ in test_it:
-        print(arg_labels)
+    for ((pt, pt_len), (ct, ct_len), arg_labels, sarc_labels), _ in train_it:
         arg_labels_all.extend(arg_labels.numpy())
         sarc_labels_all.extend(sarc_labels.numpy())
 
