@@ -115,8 +115,8 @@ class LSTM(nn.Module):
 
 
 def dynamic_loss(arg_loss, sarc_loss):
-    sigma_1 = Variable(torch.tensor(0.5), requires_grad=True)
-    sigma_2 = Variable(torch.tensor(0.5), requires_grad=True)
+    sigma_1 = Variable(torch.tensor(0.5), requires_grad=True).to(device)
+    sigma_2 = Variable(torch.tensor(0.5), requires_grad=True).to(device)
     arg_loss_dyn = torch.mul(
         torch.div(1.0, torch.mul(2.0, torch.pow(sigma_1, 2))), arg_loss
     )
