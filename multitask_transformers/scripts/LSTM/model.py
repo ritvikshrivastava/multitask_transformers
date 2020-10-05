@@ -3,6 +3,7 @@ import torch.optim as optim
 import torch.nn as nn
 import torch.nn.functional as F
 
+from collections import Counter
 from torchtext import data
 from torchtext import datasets
 from torchtext.data import Field, TabularDataset, BucketIterator
@@ -117,10 +118,10 @@ def dynamic_loss(arg_loss, sarc_loss):
     sigma_1 = Variable(torch.tensor(0.5), requires_grad=True)
     sigma_2 = Variable(torch.tensor(0.5), requires_grad=True)
     arg_loss_dyn = torch.mul(
-        torch.div(1.0, torch.mul(2.0, torch.square(sigma_1))), arg_loss
+        torch.div(1.0, torch.mul(2.0, torch.pow(sigma_1, 2))), arg_loss
     )
     sarc_loss_dyn = torch.mul(
-        torch.div(1.0, torch.mul(2.0, torch.square(sigma_2))), sarc_loss
+        torch.div(1.0, torch.mul(2.0, torch.pow(sigma_2, 2))), sarc_loss
     )
 
     loss = torch.add(arg_loss_dyn, sarc_loss_dyn)
@@ -134,7 +135,8 @@ def train(
     optimizer,
     train_it,
     test_it,
-    criterion=nn.CrossEntropyLoss(),
+    criterion_sarc=nn.CrossEntropyLoss(),
+    criterion_arg=nn.CrossEntropyLoss(),
     num_epochs=1,
     flood=False,
     flood_level=0.0,
@@ -148,7 +150,7 @@ def train(
         model.train()
 
         with tqdm(total=len(train_it)) as epoch_pbar:
-            epoch_pbar.set_description(f"Epoch {epoch}")
+            epoch_pbar.set_description(f"Epoch {epoch}/{num_epochs}")
 
             sum_loss = 0.0
             for ((pt, pt_len), (ct, ct_len), arg_labels, sarc_labels), _ in train_it:
@@ -160,8 +162,8 @@ def train(
                 # sarc_labels = sarc_labels.to(device)
 
                 sarc_outs, arg_outs = model(pt, pt_len, ct, ct_len)
-                arg_loss = criterion(arg_outs, arg_labels)
-                sarc_loss = criterion(sarc_outs, sarc_labels)
+                arg_loss = criterion_arg(arg_outs, arg_labels)
+                sarc_loss = criterion_sarc(sarc_outs, sarc_labels)
 
                 # Choose loss addition for multitask (direct-add vs dynamic)
                 if dynamic:
@@ -173,6 +175,7 @@ def train(
                 if flood:
                     loss = (loss - flood_level).abs() + flood_level
 
+                optimizer.zero_grad()
                 loss.backward()
                 sum_loss += loss.item()
                 optimizer.step()
@@ -271,11 +274,36 @@ if __name__ == "__main__":
         (train_ds, val_ds, test_ds), sort=False, batch_size=32, device=device
     )
 
+    arg_labels_all = []
+    sarc_labels_all = []
+    for ((pt, pt_len), (ct, ct_len), arg_labels, sarc_labels), _ in test_it:
+        arg_labels_all.extend(arg_labels.numpy())
+        sarc_labels_all.extend(sarc_labels.numpy())
+
+    # Generate Class Weights
+    counter_arg = Counter([train_data for train_data in arg_labels_all])
+    class_weights_arg = [0] + [
+        round(float(max(counter_arg.values())) / float(count), 2)
+        for cls, count in counter_arg.items()
+    ]
+
+    counter_sarc = Counter([train_data for train_data in sarc_labels_all])
+    class_weights_sarc = [0] + [
+        round(float(max(counter_sarc.values())) / float(count), 2)
+        for cls, count in counter_sarc.items()
+    ]
+
+    class_weights_arg = torch.tensor(class_weights_arg).to(device)
+    class_weights_sarc = torch.tensor(class_weights_sarc).to(device)
+
+    loss_fct_arg = nn.CrossEntropyLoss(weight=class_weights_arg)
+    loss_fct_sarc = nn.CrossEntropyLoss(weight=class_weights_sarc)
+
     model = LSTM(
         vocab_size=len(text_field.vocab),
         embed_dim=300,
         hidden_dim=300,
-        use_attention=True,
+        use_attention=False,
     ).to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -285,8 +313,9 @@ if __name__ == "__main__":
         optimizer,
         train_it,
         test_it,
-        nn.CrossEntropyLoss(),
-        num_epochs=1,
+        criterion_sarc=loss_fct_sarc,
+        criterion_arg=loss_fct_arg,
+        num_epochs=40,
         flood=False,
         flood_level=0.5,
         dynamic=False,
