@@ -277,9 +277,9 @@ if __name__ == "__main__":
     arg_labels_all = []
     sarc_labels_all = []
     for ((pt, pt_len), (ct, ct_len), arg_labels, sarc_labels), _ in train_it:
-        arg_labels_all.extend(arg_labels.numpy())
-        sarc_labels_all.extend(sarc_labels.numpy())
-
+        arg_labels_all.extend([i.item() for i in arg_labels])
+        sarc_labels_all.extend([i.item() for i in sarc_labels])
+        
     # Generate Class Weights
     counter_arg = Counter([train_data for train_data in arg_labels_all])
     class_weights_arg = [0] + [
