@@ -26,3 +26,21 @@ cd multitask_transformers/scripts/
 ./run_alternate_data_multitask.sh
 ```
 update model type in ``run_alternate_data_multitask.sh`` by updating <br> ``--model_name_or_path <pretrained/finetuned model name or path to dir>`` <br>
+
+## Citation
+
+Please cite the following paper if you use or ideate with Multi-task Transformers in your work:
+
+https://aclanthology.org/2021.eacl-main.171.pdf
+
+> Ghosh, D., Shrivastava, R. and Muresan, S., 2021, April. “Laughing at you or with you”: The Role of Sarcasm in Shaping the Disagreement Space. In Proceedings of the 16th Conference of the European Chapter of the Association for Computational Linguistics: Main Volume (pp. 1998-2010).
+
+```
+@inproceedings{ghosh2021laughing,
+  title={“Laughing at you or with you”: The Role of Sarcasm in Shaping the Disagreement Space},
+  author={Ghosh, Debanjan and Shrivastava, Ritvik and Muresan, Smaranda},
+  booktitle={Proceedings of the 16th Conference of the European Chapter of the Association for Computational Linguistics: Main Volume},
+  pages={1998--2010},
+  year={2021}
+}
+```
